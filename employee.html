@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>หน้าพนักงาน</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+    <style>
+        .joiner-box { border-left: 3px solid #17a2b8; padding-left: 10px; margin-top: 5px; background-color: #f8f9fa; }
+    </style>
+</head>
+<body class="bg-light">
+<div class="container-fluid mt-4 px-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>สวัสดี, {{ session.name }}</h4>
+        <a href="/logout" class="btn btn-danger btn-sm">ออกจากระบบ</a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-7 mb-4">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">📅 ค้นหาปฏิทินคิวรถ</h5>
+                    <form method="GET" action="/employee" id="monthForm" class="d-flex align-items-center gap-2">
+                        <label for="selected_month" class="form-label mb-0">เลือกเดือน:</label>
+                        <input type="month" name="selected_month" class="form-control w-auto" value="{{ selected_month_display }}" onchange="document.getElementById('monthForm').submit()">
+                        <button type="submit" class="btn btn-secondary btn-sm">ค้นหา</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ================= ส่วนปฏิทินรายเดือน 3 คัน ================= -->
+            <div class="card shadow-sm mb-4 border-info">
+                <div class="card-header bg-info text-white py-2">
+                    <h6 class="mb-0">🗓️ ปฏิทินคิวรถ เดือน {{ month_name }} {{ current_year + 543 }}</h6>
+                </div>
+                <div class="card-body p-2">
+                    <div class="row g-2">
+                        {% for van_id in ['รถเก๋ง 1', 'รถเก๋ง 2', 'รถตู้ 1'] %}
+                        <div class="col-lg-4 col-md-12">
+                            <div class="text-center fw-bold small mb-1 {% if 'เก๋ง' in van_id %}text-primary{% else %}text-success{% endif %}">
+                                🚐 {{ van_id }}
+                            </div>
+                            <table class="table table-bordered table-sm text-center mb-0" style="font-size: 0.75rem; table-layout: fixed;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-danger">อา</th><th>จ</th><th>อ</th><th>พ</th><th>พฤ</th><th>ศ</th><th class="text-danger">ส</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for week in cal_matrix %}
+                                    <tr>
+                                        {% for day in week %}
+                                            {% if day == 0 %}
+                                                <td class="bg-light border-0"></td>
+                                            {% else %}
+                                                {% set status = van_calendars[van_id][day] %}
+                                                {% set date_str = current_year ~ "-" ~ "%02d"|format(current_month) ~ "-" ~ "%02d"|format(day) %}
+                                                {% set is_selected = (date_str == selected_date) %}
+                                                
+                                                <td class="{% if is_selected %}border border-2 border-primary fw-bold shadow-sm{% endif %}" 
+                                                    style="cursor: pointer; height: 35px; vertical-align: middle; 
+                                                           {% if status == 'free' %}background-color: #d1e7dd; color: #0f5132;{% else %}background-color: #fff3cd; color: #85400f;{% endif %}"
+                                                    onclick="window.location.href='/employee?selected_date={{ date_str }}'"
+                                                    title="{% if status == 'free' %}ว่าง{% else %}มีการจองคิวแล้ว{% endif %}">
+                                                    {{ day }}
+                                                </td>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="text-center mt-3" style="font-size: 0.8rem;">
+                        <span class="badge border text-dark" style="background-color: #d1e7dd;">สีเขียว</span> = ว่างทั้งวัน | 
+                        <span class="badge border text-dark" style="background-color: #fff3cd;">สีเหลือง</span> = มีคิวแล้ว (อาจมีช่วงเวลาว่างให้ร่วมทริปได้)
+                        <br><small class="text-muted">คลิกที่วันที่เพื่อดูรายละเอียดเวลาด้านล่าง</small>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mb-3">🚗 รายละเอียดคิวรถวันที่: <span class="text-primary">{{ selected_date | format_date }}</span></h5>
+            
+            <div class="row">
+                {% for van_id in ['รถเก๋ง 1', 'รถเก๋ง 2', 'รถตู้ 1'] %}
+                <div class="col-md-6 mb-3">
+                    <div class="card shadow-sm h-100 border-0">
+                        <div class="card-header text-white {% if 'เก๋ง' in van_id %}bg-primary{% else %}bg-success{% endif %}">
+                            🚐 {{ van_id }}
+                        </div>
+                        <div class="card-body p-2">
+                            {% if vans_schedule[van_id]|length == 0 %}
+                                <div class="text-center py-4">
+                                    <h5 class="text-success mb-0">✅ ว่างตลอดวัน</h5>
+                                </div>
+                            {% else %}
+                                {% for trip in vans_schedule[van_id] %}
+                                    <div class="p-2 mb-2 border rounded shadow-sm bg-white">
+                                        <span class="badge bg-secondary">{{ trip.trip_type }}</span><br>
+                                        <small><strong>📍 เส้นทาง:</strong> {{ trip.pickup }} ➡️ {{ trip.dropoff }}</small><br>
+                                        <small><strong>⏰ เวลา:</strong> {{ trip.time }} {% if trip.estimated_end_time %}ถึง {{ trip.estimated_end_time }}{% endif %}
+                                        {% if trip.trip_type == 'ไป-กลับ' and trip.return_time %}| <strong>กลับ:</strong> {{ trip.return_time }}{% endif %}</small>
+                                        
+                                        {% if trip.joiners %}
+                                            <div class="joiner-box py-1 mt-2">
+                                                <small class="text-muted fw-bold">👥 ผู้เข้าร่วม:</small>
+                                                {% for j in trip.joiners %}
+                                                    <div class="mb-1" style="font-size: 0.85rem;">
+                                                        - <span class="badge bg-light text-dark border">{{ j.trip_type }}</span><br>
+                                                        <span class="text-muted">({{ j.pickup }} ➡️ {{ j.dropoff }} | เวลา: {{ j.time }} {% if j.estimated_end_time %}ถึง {{ j.estimated_end_time }}{% endif %})</span>
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if trip.emp_id|string != session.emp_id|string %}
+                                            <button class="btn btn-outline-info btn-sm w-100 mt-2" 
+                                                    onclick="joinTrip('{{ van_id }}', '{{ trip.id }}', '{{ trip.date }}', '{{ trip.name }}')">
+                                                🙋‍♂️ ขอเข้าร่วมคันนี้
+                                            </button>
+                                        {% else %}
+                                            <button class="btn btn-secondary btn-sm w-100 mt-2" disabled style="opacity: 0.7;">
+                                                👑 รถของคุณ (ผู้จองหลัก)
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="col-md-5">
+            <div class="card shadow-sm mb-4 sticky-top" style="top: 15px; z-index: 1020;">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0" id="form_title">📝 เปิดสายใหม่</h5>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetForm()" id="resetBtn" style="display:none;">ยกเลิก / ล้างค่า</button>
+                    </div>
+                    
+                    <form method="POST" action="/employee">
+                        <input type="hidden" name="booking_id" id="form_booking_id" value="">
+                        <input type="hidden" name="parent_id" id="form_parent_id" value="">
+                        
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">ประเภทการเดินทาง</label>
+                            <div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="trip_type" id="type_outbound" value="ขาไป" checked onchange="toggleReturnTime()">
+                                    <label class="form-check-label" for="type_outbound">ขาไป</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="trip_type" id="type_inbound" value="ขากลับ" onchange="toggleReturnTime()">
+                                    <label class="form-check-label" for="type_inbound">ขากลับ</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="trip_type" id="type_roundtrip" value="ไป-กลับ" onchange="toggleReturnTime()">
+                                    <label class="form-check-label" for="type_roundtrip">ไป-กลับ</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">วันที่เดินทาง</label>
+                            <input type="date" name="date" id="form_date" class="form-control" value="{{ selected_date }}" required>
+                        </div>
+                        
+                        <div class="row mb-2">
+                            <div class="col-6" id="time_div">
+                                <label class="form-label small mb-1" id="time_label">เวลาออกเดินทาง</label>
+                                <input type="time" name="time" id="form_time" class="form-control" required>
+                            </div>
+                            <div class="col-6" id="estimated_time_div">
+                                <label class="form-label small mb-1 text-primary">เวลาคาดว่าจะใช้ถึง</label>
+                                <input type="time" name="estimated_end_time" id="form_estimated_end_time" class="form-control" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-2" id="return_time_div" style="display: none;">
+                            <label class="form-label small mb-1" id="return_time_label">เวลากลับ</label>
+                            <input type="time" name="return_time" id="form_return_time" class="form-control">
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">เลือกรถ (กรณีเปิดสายใหม่)</label>
+                            <select name="van_id" id="form_van_id" class="form-select">
+                                <option value="รถเก๋ง 1">รถเก๋ง 1 (เดินทาง 1-3 ท่าน)</option>
+                                <option value="รถเก๋ง 2">รถเก๋ง 2 (เดินทาง 1-3 ท่าน)</option>
+                                <option value="รถตู้ 1">รถตู้ 1 (เดินทาง 3-8 ท่าน)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-2">
+                            <input type="text" name="pickup" id="form_pickup" class="form-control" placeholder="จุดรับ" required>
+                        </div>
+                        <div class="mb-2">
+                            <input type="text" name="dropoff" id="form_dropoff" class="form-control" placeholder="จุดปลายทาง" required>
+                        </div>
+                        <div class="mb-3">
+                            <input type="text" name="remark" id="form_remark" class="form-control" placeholder="หมายเหตุเพิ่มเติม">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success w-100" id="submitBtn">จองรถ / เปิดสาย</button>
+                    </form>
+                </div>
+            </div>
+
+            <h5 class="mt-4">🎫 ตั๋วและการเดินทางของฉัน</h5>
+            {% for b in bookings %}
+            <div class="card mb-2 border-start border-4 {% if 'อนุมัติ' in b.status %}border-success{% elif 'ปฏิเสธ' in b.status %}border-danger{% else %}border-warning{% endif %}">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="mb-0"><strong>{{ b.date | format_date }}</strong> | {{ b.time }} {% if b.estimated_end_time %}ถึง {{ b.estimated_end_time }}{% endif %} <span class="badge bg-secondary">{{ b.trip_type }}</span></p>
+                            <p class="mb-0 small"><strong>เส้นทาง:</strong> {{ b.pickup }} ➡️ {{ b.dropoff }} {% if b.parent_id %}<span class="badge bg-info text-dark">ขอร่วมทริป</span>{% endif %}</p>
+                            <p class="mb-0 small"><strong>รถ:</strong> {{ b.van_id }}</p>
+                            <p class="mb-0 small"><strong>สถานะ:</strong> {{ b.status }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-2">
+                        {% if 'รอหัวหน้า' in b.status or 'รอแอดมิน' in b.status %}
+                        <button class="btn btn-outline-warning btn-sm py-0 px-2 text-dark" style="font-size: 0.8rem;"
+                                onclick="editBooking('{{ b.id }}', '{{ b.date }}', '{{ b.trip_type }}', '{{ b.time }}', '{{ b.return_time }}', '{{ b.estimated_end_time }}', '{{ b.van_id }}', '{{ b.pickup }}', '{{ b.dropoff }}', '{{ b.remark }}', '{{ b.parent_id }}')">
+                            ✏️ แก้ไข
+                        </button>
+                        {% endif %}
+
+                        {% if 'รอ' in b.status or 'อนุมัติแล้ว' in b.status or 'ปฏิเสธ' in b.status %}
+                        <a href="/delete/{{ b.id }}" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 0.8rem;" onclick="return confirm('คุณต้องการลบคำขอนี้ออกจากประวัติใช่หรือไม่?')">
+                            {% if 'ปฏิเสธ' in b.status %}🗑️ ลบคำขอที่ถูกปฏิเสธ{% else %}🗑️ ลบ / ยกเลิกทริป{% endif %}
+                        </a>
+                        {% endif %}
+                        
+                        {% set ns = namespace(has_return=false) %}
+                        {% for item in bookings %}
+                            {% if item.date == b.date and item.trip_type in ['ขากลับ', 'ไป-กลับ'] and (item.parent_id == b.id or item.parent_id == b.parent_id or item.pickup == b.dropoff) %}
+                                {% set ns.has_return = true %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if b.trip_type != 'ขากลับ' and not ns.has_return %}
+                        <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size: 0.8rem;" 
+                                onclick="bookReturnTrip('{{ b.van_id }}', '{{ b.date }}', '{{ b.dropoff }}', '{{ b.pickup }}', '{{ b.parent_id }}')">
+                            🔄 จองขากลับสายเดิม
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleReturnTime() {
+        let type = document.querySelector('input[name="trip_type"]:checked').value;
+        
+        let timeDiv = document.getElementById('time_div');
+        let timeLabel = document.getElementById('time_label');
+        let timeInput = document.getElementById('form_time');
+        
+        let estTimeDiv = document.getElementById('estimated_time_div');
+        let estTimeInput = document.getElementById('form_estimated_end_time');
+        
+        let returnTimeDiv = document.getElementById('return_time_div');
+        let returnTimeInput = document.getElementById('form_return_time');
+        
+        if (type === 'ขาไป') {
+            timeLabel.innerText = "เวลาออกเดินทาง";
+            timeDiv.className = "col-6"; 
+            
+            estTimeDiv.style.display = 'block';
+            estTimeInput.required = true;
+            
+            returnTimeDiv.style.display = 'none';
+            returnTimeInput.required = false;
+            returnTimeInput.value = '';
+            
+        } else if (type === 'ขากลับ') {
+            // แก้ไขให้แสดงช่อง "เวลาคาดว่าจะใช้ถึง" คู่กับ "เวลากลับ"
+            timeLabel.innerText = "เวลากลับ";
+            timeDiv.className = "col-6"; 
+            
+            estTimeDiv.style.display = 'block';
+            estTimeInput.required = true;
+            
+            returnTimeDiv.style.display = 'none';
+            returnTimeInput.required = false;
+            returnTimeInput.value = '';
+            
+        } else if (type === 'ไป-กลับ') {
+            timeLabel.innerText = "เวลาออกเดินทาง";
+            timeDiv.className = "col-12"; 
+            
+            estTimeDiv.style.display = 'none';
+            estTimeInput.required = false;
+            estTimeInput.value = '';
+            
+            returnTimeDiv.style.display = 'block';
+            returnTimeInput.required = true;
+        }
+    }
+
+    function joinTrip(vanId, parentId, date, mainBookerName) {
+        resetForm();
+        document.getElementById('form_title').innerHTML = `🙋‍♂️ ขอเข้าร่วมทริปของ <span class="text-primary">${mainBookerName}</span>`;
+        document.getElementById('form_parent_id').value = parentId;
+        document.getElementById('form_date').value = date;
+        
+        let vanSelect = document.getElementById('form_van_id');
+        vanSelect.value = vanId;
+        vanSelect.style.pointerEvents = "none"; 
+        vanSelect.style.backgroundColor = "#e9ecef";
+
+        document.getElementById('submitBtn').innerText = "ยืนยันการขอเข้าร่วม";
+        document.getElementById('submitBtn').className = "btn btn-info text-white w-100";
+        document.getElementById('resetBtn').style.display = "inline-block";
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function editBooking(id, date, trip_type, time, return_time, estimated_end_time, van_id, pickup, dropoff, remark, parent_id) {
+        resetForm();
+        document.getElementById('form_title').innerHTML = "✏️ แก้ไขการจอง (จะถูกส่งกลับไปให้หัวหน้าพิจารณาใหม่)";
+        
+        document.getElementById('form_booking_id').value = id;
+        document.getElementById('form_date').value = date;
+        document.getElementById('form_time').value = time;
+        document.getElementById('form_pickup').value = pickup;
+        document.getElementById('form_dropoff').value = dropoff;
+        document.getElementById('form_remark').value = remark;
+
+        if (estimated_end_time && estimated_end_time.trim() !== '') {
+            document.getElementById('form_estimated_end_time').value = estimated_end_time;
+        }
+
+        if (parent_id && parent_id.trim() !== '') {
+            document.getElementById('form_parent_id').value = parent_id;
+            let vanSelect = document.getElementById('form_van_id');
+            vanSelect.value = van_id;
+            vanSelect.style.pointerEvents = "none"; 
+            vanSelect.style.backgroundColor = "#e9ecef";
+        } else {
+            document.getElementById('form_van_id').value = van_id;
+        }
+
+        if (trip_type === 'ขาไป') document.getElementById('type_outbound').checked = true;
+        else if (trip_type === 'ขากลับ') document.getElementById('type_inbound').checked = true;
+        else if (trip_type === 'ไป-กลับ') document.getElementById('type_roundtrip').checked = true;
+
+        if (return_time && return_time.trim() !== '') {
+            document.getElementById('form_return_time').value = return_time;
+        }
+
+        toggleReturnTime();
+
+        document.getElementById('submitBtn').innerText = "บันทึกการแก้ไข";
+        document.getElementById('submitBtn').className = "btn btn-warning w-100";
+        document.getElementById('resetBtn').style.display = "inline-block";
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function bookReturnTrip(vanId, date, newPickup, newDropoff, parentId) {
+        resetForm(); 
+        document.getElementById('form_title').innerHTML = "🔄 จองขากลับสายเดิม";
+        document.getElementById('form_date').value = date;
+        
+        document.getElementById('form_pickup').value = newPickup;
+        document.getElementById('form_dropoff').value = newDropoff;
+        
+        let vanSelect = document.getElementById('form_van_id');
+        vanSelect.value = vanId;
+        
+        if (parentId && parentId.trim() !== '') {
+            document.getElementById('form_parent_id').value = parentId;
+            vanSelect.style.pointerEvents = "none"; 
+            vanSelect.style.backgroundColor = "#e9ecef";
+        }
+        
+        document.getElementById('type_inbound').checked = true;
+        toggleReturnTime();
+
+        document.getElementById('submitBtn').innerText = "ยืนยันจองขากลับ";
+        document.getElementById('submitBtn').className = "btn btn-primary w-100";
+        document.getElementById('resetBtn').style.display = "inline-block";
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetForm() {
+        document.getElementById('form_title').innerHTML = "📝 เปิดสายใหม่";
+        document.getElementById('form_booking_id').value = "";
+        document.getElementById('form_parent_id').value = "";
+        
+        document.getElementById('form_pickup').value = "";
+        document.getElementById('form_dropoff').value = "";
+        document.getElementById('form_time').value = "";
+        document.getElementById('form_estimated_end_time').value = "";
+        document.getElementById('form_return_time').value = "";
+        document.getElementById('form_remark').value = "";
+        
+        let vanSelect = document.getElementById('form_van_id');
+        vanSelect.style.pointerEvents = "auto";
+        vanSelect.style.backgroundColor = "";
+
+        document.getElementById('type_outbound').checked = true;
+        toggleReturnTime();
+
+        document.getElementById('submitBtn').innerText = "จองรถ / เปิดสาย";
+        document.getElementById('submitBtn').className = "btn btn-success w-100";
+        document.getElementById('resetBtn').style.display = "none";
+    }
+</script>
+</body>
+</html>

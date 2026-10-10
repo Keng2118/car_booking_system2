@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ใบงานคนขับ (Manifest)</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+    <style>
+        .joiner-box { 
+            border-left: 3px solid #0d6efd; 
+            padding-left: 10px; 
+            margin-top: 8px; 
+            background-color: #f8f9fa; 
+            border-radius: 4px; 
+            padding-top: 5px; 
+            padding-bottom: 5px; 
+        }
+    </style>
+</head>
+<body class="bg-dark text-white">
+<div class="container mt-3 mb-5">
+    
+    <!-- ส่วนหัว (รูปแบบเดิม) -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5>🚐 ใบงานรถ : <span class="text-info">{{ assigned_van }}</span> ({{ session.get('name') }})</h5>
+        <a href="/logout" class="btn btn-light btn-sm fw-bold">🚪 ออก</a>
+    </div>
+
+    {% for m in manifest %}
+    <div class="card text-dark mb-3 shadow-sm border-start border-5 
+        {% if m.trip_type == 'ขาไป' %}border-primary
+        {% elif m.trip_type == 'ขากลับ' %}border-warning
+        {% else %}border-success{% endif %}">
+        
+        <div class="card-body">
+            <!-- ชื่อผู้จองหลัก แผนก และป้ายประเภทการเดินทาง -->
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <h6 class="text-primary fw-bold mb-1">
+                        👑 ผู้จองหลัก: {{ m.name }} 
+                        <span class="badge bg-secondary fw-normal" style="font-size: 0.75rem;">แผนก {{ m.department if m.department else 'ทั่วไป' }}</span>
+                    </h6>
+                    <!-- เพิ่มเบอร์โทรผู้จองหลัก (กดโทรออกได้) -->
+                    <div>
+                        <strong>📞 เบอร์ติดต่อ:</strong> 
+                        {% if m.phone and m.phone != 'None' and m.phone != '-' %}
+                            <a href="tel:{{ m.phone }}" class="text-success fw-bold text-decoration-none">{{ m.phone }} (กดเพื่อโทร)</a>
+                        {% else %}
+                            <span class="text-muted">ไม่ระบุเบอร์โทร</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    {% if m.trip_type == 'ขาไป' %}
+                        <span class="badge bg-primary">➡️ ขาไป</span>
+                    {% elif m.trip_type == 'ขากลับ' %}
+                        <span class="badge bg-warning text-dark">⬅️ ขากลับ</span>
+                    {% else %}
+                        <span class="badge bg-success">🔁 ไป-กลับ</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr class="my-2 text-muted">
+
+            <!-- รายละเอียดเวลาและสถานที่ (รูปแบบเดิม) -->
+            <p class="mb-1"><strong>📅 วันที่:</strong> {{ m.date | format_date }}</p>
+            <p class="mb-1"><strong>⏰ เวลาเดินทาง:</strong> <span class="text-primary fw-bold">{{ m.time }}</span> {% if m.estimated_end_time %}ถึง <span class="text-danger fw-bold">{{ m.estimated_end_time }}</span>{% endif %}</p>
+            {% if m.return_time %}
+            <p class="mb-1"><strong>⏰ เวลานัดรับกลับ:</strong> <span class="text-danger fw-bold">{{ m.return_time }}</span></p>
+            {% endif %}
+            <p class="mb-1"><strong>📍 เส้นทาง:</strong> <span class="text-success fw-bold">{{ m.pickup }}</span> ➡️ <span class="text-danger fw-bold">{{ m.dropoff }}</span></p>
+            
+            {% if m.remark %}
+            <p class="mb-1 text-muted"><small><strong>📝 หมายเหตุ:</strong> {{ m.remark }}</small></p>
+            {% endif %}
+
+            <!-- กล่องผู้โดยสารร่วมทริป (รูปแบบเดิม + เพิ่มเบอร์โทร) -->
+            {% if m.joiners %}
+                <div class="joiner-box mt-2">
+                    <small class="text-muted fw-bold">👥 ผู้โดยสารร่วมทริปนี้ ({{ m.joiners|length }} คน):</small>
+                    {% for j in m.joiners %}
+                        <div class="mt-1 pt-1 border-top" style="font-size: 0.9rem;">
+                            <strong>- {{ j.name }}</strong> 
+                            {% if j.department %}<small class="text-muted">({{ j.department }})</small>{% endif %}
+                            <span class="badge bg-secondary" style="font-size: 0.75rem;">{{ j.trip_type }}</span>
+                            
+                            <!-- เบอร์โทรผู้โดยสารร่วม -->
+                            {% if j.phone and j.phone != 'None' and j.phone != '-' %}
+                                <a href="tel:{{ j.phone }}" class="text-success fw-bold ms-1 text-decoration-none" style="font-size: 0.85rem;">📞 {{ j.phone }}</a>
+                            {% endif %}
+                            <br>
+                            <span class="text-muted">📍 รับ: {{ j.pickup }} ➡️ ส่ง: {{ j.dropoff }}</span><br>
+                            <span class="text-muted">⏰ ออก: {{ j.time }} {% if j.estimated_end_time %}ถึง {{ j.estimated_end_time }}{% endif %}</span>
+                            {% if j.remark %}<br><span class="text-muted"><small>หมายเหตุ: {{ j.remark }}</small></span>{% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="text-center mt-5 p-4 border border-secondary rounded">
+        <p class="mb-0 text-muted">🎉 ไม่มีรอบวิ่งที่ได้รับอนุมัติสำหรับรถคันนี้</p>
+    </div>
+    {% endfor %}
+</div>
+</body>
+</html>

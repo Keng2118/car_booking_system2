@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>จัดการข้อมูลพนักงาน</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+</head>
+<body class="bg-light">
+<div class="container-fluid mt-4 mb-5 px-4">
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>👥 ระบบจัดการข้อมูลพนักงาน ({{ all_users|length }} คน)</h2>
+        <div>
+            <button class="btn btn-primary btn-sm shadow-sm me-2" onclick="openAddUserForm()">➕ เพิ่มผู้ใช้ใหม่</button>
+            <a href="/admin" class="btn btn-secondary btn-sm shadow-sm">🔙 กลับหน้าแอดมิน (คิวรถ)</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <!-- ฟอร์มเพิ่ม/แก้ไข พนักงาน -->
+    <div class="card mb-4 border-primary shadow-sm" id="userFormCard" style="display: none;">
+        <div class="card-header bg-primary text-white">
+            <h6 id="userFormTitle" class="mb-0">เพิ่มพนักงานใหม่</h6>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="/manage_users">
+                <input type="hidden" name="action" id="user_action" value="add_user">
+                <div class="row align-items-end">
+                    <div class="col-md-2 mb-2">
+                        <label class="small">รหัสพนักงาน (ID)</label>
+                        <input type="text" name="emp_id" id="u_emp_id" class="form-control" required placeholder="เช่น 1234">
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="small">รหัสผ่าน (PIN)</label>
+                        <input type="text" name="pin" id="u_pin" class="form-control" required>
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="small">ชื่อ-นามสกุล</label>
+                        <input type="text" name="name" id="u_name" class="form-control" required>
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="small text-primary fw-bold">แผนก (Department)</label>
+                        <input type="text" name="department" id="u_department" class="form-control border-primary" required placeholder="เช่น IT, บุคคล">
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="small text-success fw-bold">📞 เบอร์โทรศัพท์</label>
+                        <input type="text" name="phone" id="u_phone" class="form-control border-success" placeholder="เช่น 081-234-5678">
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="small">สิทธิ์ (Role)</label>
+                        <select name="role" id="u_role" class="form-select">
+                            <option value="employee">พนักงาน (employee)</option>
+                            <option value="supervisor">หัวหน้างาน (supervisor)</option>
+                            <option value="driver">คนขับรถ (driver)</option>
+                            <option value="admin">แอดมิน (admin)</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- ปุ่มบันทึกข้อมูลและยกเลิก ชิดฝั่งขวา -->
+                <div class="mt-2 text-end">
+                    <button type="submit" class="btn btn-success btn-sm">💾 บันทึกข้อมูล</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('userFormCard').style.display='none'">❌ ยกเลิก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ช่องค้นหาข้อมูลพนักงาน (อยู่ฝั่งขวา + ข้อความหายใน 8 วิ) -->
+    <!-- ========================================== -->
+    <div class="card shadow-sm mb-4 border-info">
+        <div class="card-body py-2 px-3 bg-white rounded">
+            <div class="row align-items-center justify-content-between">
+                <div class="col-md-5 text-muted small mb-2 mb-md-0">
+                    <span id="searchHint" style="transition: opacity 0.5s ease;">💡 ค้นหาได้ทั้งรหัสพนักงาน, ชื่อ-นามสกุล, แผนก และเบอร์โทรศัพท์</span>
+                </div>
+                <div class="col-md-7">
+                    <div class="input-group justify-content-md-end">
+                        <input type="text" id="searchInput" class="form-control border-info" style="max-width: 350px;" placeholder="พิมพ์คำค้นหาที่นี่..." onkeyup="filterUsers()">
+                        <button class="btn btn-info text-dark fw-bold border-info" type="button" onclick="filterUsers()">🔍 ค้นหา</button>
+                        <button class="btn btn-outline-secondary" type="button" onclick="clearSearch()">❌ ล้างค่า</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ตารางแบ่ง 2 ฝั่ง: ซ้าย (พนักงานทั่วไป) / ขวา (หัวหน้า, คนขับ, แอดมิน) -->
+    <div class="row">
+        <!-- ฝั่งซ้าย: พนักงานทั่วไป -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm border-primary h-100">
+                <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">👨‍💼 พนักงานทั่วไป (Employee)</h6>
+                </div>
+                <div class="card-body p-0 table-responsive" style="max-height: 550px; overflow-y: auto;">
+                    <table class="table table-hover mb-0 align-middle text-center" id="empTable">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>รหัส</th>
+                                <th>ชื่อ - นามสกุล</th>
+                                <th>แผนก</th>
+                                <th>เบอร์โทรศัพท์</th>
+                                <th>PIN</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for u in all_users if u.role == 'employee' %}
+                            <tr class="user-row">
+                                <td class="fw-bold">{{ u.emp_id }}</td>
+                                <td>{{ u.name }}</td>
+                                <td><span class="badge bg-secondary">{{ u.department if u.department else 'ทั่วไป' }}</span></td>
+                                <td>
+                                    {% if u.phone and u.phone != 'None' and u.phone != '-' %}
+                                        <span class="text-success fw-bold">📞 {{ u.phone }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="text-muted">{{ u.pin }}</span></td>
+                                <td>
+                                    <button class="btn btn-outline-warning btn-sm py-0 px-2 text-dark" 
+                                            onclick="openEditUserForm('{{ u.emp_id }}', '{{ u.pin }}', '{{ u.name }}', '{{ u.role }}', '{{ u.department }}', '{{ u.phone if u.phone else '' }}')">
+                                        ✏️
+                                    </button>
+                                    <form method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ {{ u.name }}?');">
+                                        <input type="hidden" name="action" value="delete_user">
+                                        <input type="hidden" name="emp_id" value="{{ u.emp_id }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">🗑️</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-muted py-3">ไม่มีข้อมูลพนักงานทั่วไป</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ฝั่งขวา: หัวหน้างาน / คนขับรถ / แอดมิน -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm border-dark h-100">
+                <div class="card-header bg-dark text-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🛡️ หัวหน้างาน / คนขับรถ / แอดมิน</h6>
+                </div>
+                <div class="card-body p-0 table-responsive" style="max-height: 550px; overflow-y: auto;">
+                    <table class="table table-hover mb-0 align-middle text-center" id="staffTable">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>รหัส</th>
+                                <th>ชื่อ - นามสกุล</th>
+                                <th>แผนก</th>
+                                <th>เบอร์โทรศัพท์</th>
+                                <th>สิทธิ์</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for u in all_users if u.role != 'employee' %}
+                            <tr class="user-row">
+                                <td class="fw-bold">{{ u.emp_id }}</td>
+                                <td>{{ u.name }}</td>
+                                <td><span class="badge bg-secondary">{{ u.department if u.department else 'ทั่วไป' }}</span></td>
+                                <td>
+                                    {% if u.phone and u.phone != 'None' and u.phone != '-' %}
+                                        <span class="text-success fw-bold">📞 {{ u.phone }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if u.role == 'admin' %}<span class="badge bg-danger">Admin</span>
+                                    {% elif u.role == 'supervisor' %}<span class="badge bg-info text-dark">Supervisor</span>
+                                    {% elif u.role == 'driver' %}<span class="badge bg-success">Driver</span>{% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-outline-warning btn-sm py-0 px-2 text-dark" 
+                                            onclick="openEditUserForm('{{ u.emp_id }}', '{{ u.pin }}', '{{ u.name }}', '{{ u.role }}', '{{ u.department }}', '{{ u.phone if u.phone else '' }}')">
+                                        ✏️
+                                    </button>
+                                    <form method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ {{ u.name }}?');">
+                                        <input type="hidden" name="action" value="delete_user">
+                                        <input type="hidden" name="emp_id" value="{{ u.emp_id }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">🗑️</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-muted py-3">ไม่มีข้อมูล</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ตั้งเวลาให้คำแนะนำการค้นหาแสดง 8 วินาที (8000 มิลลิวินาที) แล้วค่อยๆ จางหายไป
+    setTimeout(function() {
+        let hint = document.getElementById('searchHint');
+        if (hint) {
+            hint.style.opacity = '0';
+            setTimeout(() => { hint.style.display = 'none'; }, 500);
+        }
+    }, 8000);
+
+    // ฟังก์ชันค้นหาข้อมูลพนักงาน
+    function filterUsers() {
+        let input = document.getElementById('searchInput').value.toLowerCase();
+        let rows = document.querySelectorAll('.user-row');
+        
+        rows.forEach(row => {
+            let text = row.innerText.toLowerCase();
+            if (text.includes(input)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // ฟังก์ชันล้างช่องค้นหา
+    function clearSearch() {
+        document.getElementById('searchInput').value = '';
+        filterUsers();
+        document.getElementById('searchInput').focus();
+    }
+
+    function openAddUserForm() {
+        let card = document.getElementById('userFormCard');
+        card.style.display = 'block';
+        card.className = "card mb-4 border-info shadow-sm";
+        document.getElementById('userFormTitle').innerText = '➕ เพิ่มพนักงานใหม่';
+        document.getElementById('user_action').value = 'add_user';
+        
+        document.getElementById('u_emp_id').value = '';
+        document.getElementById('u_emp_id').readOnly = false;
+        document.getElementById('u_pin').value = '';
+        document.getElementById('u_name').value = '';
+        document.getElementById('u_department').value = 'ทั่วไป';
+        document.getElementById('u_phone').value = '';
+        document.getElementById('u_role').value = 'employee';
+    }
+
+    function openEditUserForm(emp_id, pin, name, role, department, phone) {
+        let card = document.getElementById('userFormCard');
+        card.style.display = 'block';
+        card.className = "card mb-4 border-warning shadow-sm";
+        document.getElementById('userFormTitle').innerText = '✏️ แก้ไขข้อมูลพนักงาน';
+        document.getElementById('user_action').value = 'edit_user';
+        
+        document.getElementById('u_emp_id').value = emp_id;
+        document.getElementById('u_emp_id').readOnly = true;
+        document.getElementById('u_pin').value = pin;
+        document.getElementById('u_name').value = name;
+        document.getElementById('u_department').value = (department === 'None' || department === '') ? 'ทั่วไป' : department;
+        document.getElementById('u_phone').value = (phone === 'None' || phone === '-') ? '' : phone;
+        document.getElementById('u_role').value = role;
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
+</body>
+</html>

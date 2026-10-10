@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบพิจารณาการจองรถ (หัวหน้างาน)</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+</head>
+<body class="bg-light">
+<div class="container-fluid mt-4 mb-5 px-3">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>🧑‍💼 ระบบพิจารณาคำขอจองรถ <span class="text-primary fs-5">(แผนก: {{ sup_dept }})</span></h2>
+        <div>
+            <span class="me-3 fw-bold text-secondary">👤 เข้าสู่ระบบ: {{ session.get('name') }}</span>
+            <a href="/logout" class="btn btn-danger btn-sm shadow-sm">🚪 ออกจากระบบ</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- ========================================== -->
+    <!-- แบ่ง 2 ตารางคู่กัน (ซ้าย: รออนุมัติ / ขวา: ประวัติ) -->
+    <!-- ========================================== -->
+    <div class="row">
+
+        <!-- ฝั่งซ้าย: รายการรอหัวหน้าอนุมัติ -->
+        <div class="col-xl-6 mb-4">
+            <div class="card shadow-sm border-warning h-100">
+                <div class="card-header bg-warning text-dark fw-bold py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">⏳ รายการรออนุมัติจากแผนก ({{ pending_bookings|length }} รายการ)</h6>
+                </div>
+                <div class="card-body p-0 table-responsive" style="max-height: 600px; overflow-y: auto;">
+                    <table class="table table-hover table-sm align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>รหัส</th>
+                                <th>วัน / เวลา</th>
+                                <th>ผู้จอง</th>
+                                <th>จุดรับ ➡️ ส่ง</th>
+                                <th>รถ / คนขับ</th>
+                                <th>เหตุผล</th>
+                                <th class="bg-light">จัดการคำขอ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in pending_bookings %}
+                            <tr>
+                                <td><span class="badge bg-secondary">{{ b.id }}</span></td>
+                                <td>
+                                    <b class="text-dark">{{ b.date|format_date }}</b><br>
+                                    <span class="text-primary fw-bold">{{ b.time }}</span>-<span class="text-danger">{{ b.estimated_end_time if b.estimated_end_time else 'ไม่ระบุ' }}</span>
+                                </td>
+                                <td>
+                                    <span class="fw-bold">{{ b.name }}</span><br>
+                                    <small class="text-muted">{{ b.department }}</small>
+                                </td>
+                                <td>
+                                    <span class="text-success fw-bold">{{ b.pickup }}</span><br>⬇️<br><span class="text-danger fw-bold">{{ b.dropoff }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-dark mb-1">{{ b.trip_type }}</span><br>
+                                    <span class="badge bg-info text-dark">{{ b.van_id }}</span>
+                                    
+                                    <!-- ข้อมูลคนขับ -->
+                                    {% set d_info = driver_mapping.get(b.van_id, {'name': 'ไม่มีข้อมูล', 'phone': '-'}) %}
+                                    <div class="mt-1 text-start d-inline-block border rounded bg-white p-1 shadow-sm" style="font-size: 0.7rem; line-height: 1.3; min-width: 120px;">
+                                        <span class="text-secondary fw-bold">🧑‍✈️ {{ d_info.name }}</span><br>
+                                        <span class="text-success fw-bold">📞 {{ d_info.phone }}</span>
+                                    </div>
+                                </td>
+                                <td class="text-start" style="max-width: 120px;">
+                                    <small class="text-muted">{{ b.remark if b.remark else '-' }}</small>
+                                </td>
+                                <td class="bg-light" style="min-width: 150px;">
+                                    <div class="d-flex justify-content-center gap-1">
+                                        <form method="POST" class="m-0">
+                                            <input type="hidden" name="action" value="approve">
+                                            <input type="hidden" name="booking_id" value="{{ b.id }}">
+                                            <button type="submit" class="btn btn-success btn-sm py-0 px-2 shadow-sm" style="font-size: 0.75rem;" onclick="return confirm('✅ ยืนยันการอนุมัติ ส่งต่อให้แอดมินจัดรถ?');">✔️ อนุมัติ</button>
+                                        </form>
+                                        <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 shadow-sm" style="font-size: 0.75rem;" onclick="rejectBooking('{{ b.id }}')">❌ ปฏิเสธ</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-muted py-5">🎉 ไม่มีรายการรออนุมัติในแผนกของคุณ</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ฝั่งขวา: ประวัติการอนุมัติ -->
+        <div class="col-xl-6 mb-4">
+            <div class="card shadow-sm border-secondary h-100">
+                <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🗂️ ประวัติการดำเนินการของแผนก ({{ history_bookings|length }} รายการ)</h6>
+                </div>
+                <div class="card-body p-0 table-responsive" style="max-height: 600px; overflow-y: auto;">
+                    <table class="table table-hover table-sm align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>รหัส</th>
+                                <th>วัน / เวลา</th>
+                                <th>ผู้จอง</th>
+                                <th>จุดรับ ➡️ ส่ง</th>
+                                <th>รถ / คนขับ</th>
+                                <th>เหตุผล</th>
+                                <th class="bg-light">สถานะล่าสุด</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in history_bookings %}
+                            <tr>
+                                <td><span class="badge bg-secondary">{{ b.id }}</span></td>
+                                <td>
+                                    <b class="text-dark">{{ b.date|format_date }}</b><br>
+                                    <span class="text-primary fw-bold">{{ b.time }}</span>-<span class="text-danger">{{ b.estimated_end_time if b.estimated_end_time else 'ไม่ระบุ' }}</span>
+                                </td>
+                                <td>
+                                    <span class="fw-bold">{{ b.name }}</span><br>
+                                    <small class="text-muted">{{ b.department }}</small>
+                                </td>
+                                <td>
+                                    <span class="text-success fw-bold">{{ b.pickup }}</span><br>⬇️<br><span class="text-danger fw-bold">{{ b.dropoff }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-dark mb-1">{{ b.trip_type }}</span><br>
+                                    <span class="badge bg-light text-dark border">{{ b.van_id }}</span>
+
+                                    <!-- ข้อมูลคนขับ -->
+                                    {% set d_info = driver_mapping.get(b.van_id, {'name': 'ไม่มีข้อมูล', 'phone': '-'}) %}
+                                    <div class="mt-1 text-start d-inline-block border rounded bg-white p-1 shadow-sm" style="font-size: 0.7rem; line-height: 1.3; min-width: 120px;">
+                                        <span class="text-secondary fw-bold">🧑‍✈️ {{ d_info.name }}</span><br>
+                                        <span class="text-success fw-bold">📞 {{ d_info.phone }}</span>
+                                    </div>
+                                </td>
+                                <td class="text-start" style="max-width: 120px;">
+                                    <small class="text-muted">{{ b.remark if b.remark else '-' }}</small>
+                                </td>
+                                <td class="bg-light" style="min-width: 130px;">
+                                    {% if '🔴' in b.status or 'ปฏิเสธ' in b.status %}
+                                        <span class="badge bg-danger mb-1">{{ b.status }}</span>
+                                    {% elif '🟢' in b.status or 'อนุมัติแล้ว' in b.status %}
+                                        <span class="badge bg-success mb-1">🟢 อนุมัติแล้ว</span>
+                                    {% elif '🟠' in b.status or 'รอแอดมิน' in b.status %}
+                                        <span class="badge bg-warning text-dark mb-1">🟠 รอแอดมินอนุมัติ</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary mb-1">{{ b.status }}</span>
+                                    {% endif %}
+                                    
+                                    {% if 'รอแอดมิน' in b.status or 'หัวหน้า' in b.status %}
+                                    <form method="POST" class="mt-1">
+                                        <input type="hidden" name="action" value="undo">
+                                        <input type="hidden" name="booking_id" value="{{ b.id }}">
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size: 0.7rem;" onclick="return confirm('ต้องการยกเลิกคำสั่งเดิม และดึงเรื่องนี้กลับมาพิจารณาใหม่ใช่หรือไม่?');">
+                                            ↩️ ดึงเรื่องกลับ
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-muted py-5">ยังไม่มีประวัติ</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ฟอร์มซ่อนสำหรับส่งเหตุผลการปฏิเสธ -->
+    <form id="rejectForm" method="POST" style="display: none;">
+        <input type="hidden" name="action" value="reject">
+        <input type="hidden" name="booking_id" id="reject_booking_id">
+        <input type="hidden" name="reason" id="reject_reason">
+    </form>
+
+</div>
+
+<script>
+    function rejectBooking(bookingId) {
+        let reason = prompt("กรุณาระบุเหตุผลที่ไม่อนุมัติ (เช่น ไม่จำเป็น, รถเต็ม):");
+        if (reason !== null) {
+            document.getElementById('reject_booking_id').value = bookingId;
+            document.getElementById('reject_reason').value = reason;
+            document.getElementById('rejectForm').submit();
+        }
+    }
+</script>
+</body>
+</html>
